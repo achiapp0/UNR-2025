@@ -115,8 +115,11 @@ final_campaign_summary_with_total = pd.concat([campaign_summary[['campaign', 'CR
 print("Campaign Performance Summary (CRT, ROI, AdCost) with Total:")
 print(final_campaign_summary_with_total)
 
-#------------------------Gráficos-------------------------------#
-# Evolución de ventas en dolares ('y') 
+#--------------------------------------------------------------------------------------------------------#
+#----------------Gráficos a modo de ejemplo se presentan para la variable respuesta 'y'------------------#
+#--------------------------------------------------------------------------------------------------------#
+
+# ------ Evolución de ventas en dolares ('y') 
 if 'year_month' not in df.columns:
     df['year_month'] = df['ds'].dt.to_period('M')
 
@@ -177,3 +180,142 @@ plt.grid(True)
 plt.tight_layout()
 plt.show() 
 
+# ------ Evolución de ventas en dolares ('y') por campaña
+campaigns = df['campaign'].unique()
+
+# Definir la grilla 
+n_campaigns = len(campaigns)
+cols = 3 
+rows = (n_campaigns + cols - 1) // cols  
+fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4), sharex=False)  
+axes = axes.flatten()  
+
+# Crear los gráficos de serie de tiempo en la grilla por campaña
+for i, campaign in enumerate(campaigns):
+    ax = axes[i]  # Get the current subplot
+    campaign_data = df[df['campaign'] == campaign]
+    ax.plot(campaign_data['ds'], campaign_data['budget_USD'], color='skyblue')
+    y_visual_name = nombres_para_visualizacion.get('y', 'y') 
+    
+    ax.set_title(f"{campaign}")
+    ax.set_xlabel("Fecha")
+    ax.set_ylabel(y_visual_name)
+    ax.tick_params(axis='x', rotation=45)
+    ax.grid(True) 
+
+# Eliminar gráficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+# Ajustar la esctructura y mostrar los gráficos
+plt.tight_layout()
+plt.show()
+
+# ------ Histograma de ventas en dolares ('y') por campaña
+
+campaigns = df['campaign'].unique()
+
+# Definir la grilla 
+n_campaigns = len(campaigns)
+cols = 3 
+rows = (n_campaigns + cols - 1) // cols  
+fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4), sharex=False) 
+axes = axes.flatten() 
+
+# Crear los histogramas en la grilla por campaña
+for i, campaign in enumerate(campaigns):
+    ax = axes[i] 
+    campaign_data = df[df['campaign'] == campaign]
+
+    sns.histplot(data=campaign_data, x='y', ax=ax, kde=True, color='royalblue') 
+    
+    y_visual_name = nombres_para_visualizacion.get('y', 'y') 
+
+    ax.set_title(f"{campaign}")
+    ax.set_xlabel(y_visual_name)
+    ax.set_ylabel("Frecuencia") 
+    
+# Eliminar gráficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+# Ajustar la esctructura y mostrar los gráficos
+plt.tight_layout()
+plt.show()
+
+
+# ------ Box-plot de ventas en dolares ('y') por campaña
+
+campaigns = df['campaign'].unique()
+
+# Definir la grilla 
+n_campaigns = len(campaigns)
+cols = 3 
+rows = (n_campaigns + cols - 1) // cols  
+fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4), sharex=False) 
+axes = axes.flatten() 
+
+# Crear los boxplot en la grilla por campaña
+for i, campaign in enumerate(campaigns):
+    ax = axes[i] 
+    campaign_data = df[df['campaign'] == campaign]
+
+    sns.boxplot(data=campaign_data, x='y', ax=ax, kde=True, color='skyblue') 
+    
+    y_visual_name = nombres_para_visualizacion.get('y', 'y') 
+
+    ax.set_title(f"{campaign}")
+    ax.set_xlabel(y_visual_name)
+    ax.set_ylabel("Frecuencia") 
+    
+# Eliminar gráficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+# Ajustar la esctructura y mostrar los gráficos
+plt.tight_layout()
+plt.show()
+
+# ------ Evolución de ventas en dolares ('y') por campaña identificando Cyber Day y No Cyber Day
+# Es un gráfico a modo ejemplo, se ajustó para otras variables como día de semana / fines de semana, Evento / No evento
+
+df['cyber_status'] = df['is_cyber'].apply(lambda x: 'Cyber Day' if x == 1 else 'No Cyber Day')
+
+campaigns = df['campaign'].unique()
+
+# Definir la griolla
+n_campaigns = len(campaigns)
+cols = 3 
+rows = (n_campaigns + cols - 1) // cols  
+
+fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4), sharex=False) 
+axes = axes.flatten()  
+
+y_visual_name = nombres_para_visualizacion.get('y', 'y')
+
+# Crear el gráfico de series de tiempo para la grilla
+for i, campaign in enumerate(campaigns):
+    ax = axes[i]  # Get the current subplot
+    campaign_data = df[df['campaign'] == campaign].copy() 
+
+    if 'cyber_status' not in campaign_data.columns:
+        campaign_data['cyber_status'] = campaign_data['is_cyber'].apply(lambda x: 'Cyber Day' if x == 1 else 'No Cyber Day')
+
+    sns.lineplot(data=campaign_data, x='ds', y='y', hue='cyber_status', ax=ax,
+                 palette={'No Cyber Day': 'royalblue', 'Cyber Day': 'red'}, marker='o', markersize=3, linestyle='')
+
+    ax.set_title(f"{campaign}")
+    ax.set_xlabel("Fecha")
+    ax.set_ylabel(y_visual_name)
+    ax.tick_params(axis='x', rotation=45) # Rotate x-axis labels for better readability
+    ax.grid(True) # Add grid for better readability of time series
+    ax.legend(title='Tipo de Día', loc='upper right') # Add legend with title and location
+
+
+# Eliminar gráficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+# Ajustar la esctructura y mostrar los gráficos
+plt.tight_layout()
+plt.show()
