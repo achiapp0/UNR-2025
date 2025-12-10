@@ -74,11 +74,11 @@ for i, var in enumerate(variables_a_graficar):
     ax.tick_params(axis='x', rotation=45)
     ax.grid(False) 
 
-# Eliminar graficos vacios
-for j in range(i + 1, len(axs)):
-    fig.delaxes(axs[j])
+# Eliminar gráficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
 
-# Ajustar estructura
+# Ajustar la esctructura y mostrar los gráficos
 plt.tight_layout()
 plt.show()
 
