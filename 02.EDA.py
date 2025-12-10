@@ -2,6 +2,7 @@
 # Establecer la variable fecha como columna y renombrar como "date"
 df = df.reset_index(names="date") 
 
+#----------------------------------------------------------------------------------------------------------------------------------------------#
 # Identificar cuál es la respuesta y cual es la variable que refiere al tiempo en la serie
 df = df.rename(columns={'date': 'ds', 'nmv_USD': 'y'})
 
@@ -10,6 +11,7 @@ df['ds'] = pd.to_datetime(df['ds'])
 
 # Revisar las primeras filas del dataframe
 print(df.head())
+#---------------------------------------------------------------------------------------------------------------------------------------------#
 
 # Definir el diccionario de variables con los nombres que se utilizarán para visualización
 nombres_para_visualizacion = {
@@ -27,6 +29,7 @@ nombres_para_visualizacion = {
     'budget_USD': 'Presupuesto/inversión en GAds',
     'cost_USD': 'Costo facturado en Google Ads'
 }
+#----------------------------------------------------------------------------------------------------------------------------------------------#
 
 # Identificar datos faltantes por campaña
 
@@ -42,84 +45,69 @@ for campaign, dates in campaign_dates.items():
     if not missing_dates.empty:
         print(f"Campaign: {campaign}")
         print(f"Missing Dates: {missing_dates.tolist()}")
+#----------------------------------------------------------------------------------------------------------------------------------------------#
         
----------------------------------------------------------------------OUTLIERS ------------------------------------------------------
-# Assuming 'df' is your DataFrame loaded in the previous steps
-# Assuming 'campaigns' is the list of unique campaign names
+# Identificación de outliers por campaña
 
-# Initialize a list to store the results from each campaign
+# Definir el guardado de los resultados
 outlier_results = []
 
-# Iterate through each campaign
+# Iterar a través de cada campaña
 for campaign in campaigns:
     print(f"\nDetecting outliers for campaign: {campaign}")
 
-    # Filter data for the current campaign
     df_campaign = df[df['campaign'] == campaign].copy()
 
-    # Select the columns you want to use for outlier detection
-    # You might want to choose relevant numerical columns here
-    # For example, let's use 'y' and 'budget_USD' as features for COPOD
-    features_for_copod = ['y', 'budget_USD', 'clicks', 'impressions', 'visitors', 'visits', 'orders', 'total_units_net', 'cost_USD'] # Add or remove features as needed
+    # Seleccionar las variables sobre las que se identificarán los outliers
+    features_for_copod = ['y', 'budget_USD', 'clicks', 'impressions', 'visitors', 'visits', 'orders', 'total_units_net', 'cost_USD'] 
 
-    # Ensure the campaign data has the necessary features
     campaign_features = df_campaign[features_for_copod]
-
-    # Handle potential missing values in the features
-    # You might want to use an imputer or drop rows with NaNs
-    # For simplicity, let's drop rows with NaNs for this example
     campaign_features_cleaned = campaign_features.dropna()
-
-    # Keep track of the original indices before dropping NaNs
     original_indices = campaign_features_cleaned.index
 
-    # Scale the features
+    # Escalar características
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(campaign_features_cleaned)
 
-    # Initialize and train COPOD model
+    # Inicialziar y entrenar el modelo COPOD para identificar outliers
     clf = COPOD()
     clf.fit(X_scaled)
 
-    # Get outlier labels and scores
+    # Identificar, etiquetar y calcular score de outliers
     outlier_labels = clf.labels_
     decision_scores = clf.decision_scores_
 
-    # Create a temporary DataFrame to store the results for the current campaign
+    # Guardar los resultados en forma temporaria por campaña
     temp_results_df = pd.DataFrame({
         'original_index': original_indices,
         'copod_outlier': outlier_labels,
         'copod_score': decision_scores
     })
 
-    # Append the results to the list
+    # Abrir los resultados
     outlier_results.append(temp_results_df)
 
-# Concatenate the results from all campaigns
+# Concatenar los resultados para todas las campañas
 all_outlier_results = pd.concat(outlier_results)
 
-# Merge the results back into the original DataFrame
-# We'll merge based on the original index to align the results correctly
+# Unir los resultados con el dataframe original
+
 df = df.merge(all_outlier_results, left_index=True, right_on='original_index', how='left')
 
-# Drop the temporary 'original_index' column
+# Eliminar 'original_index' temporaria
 df = df.drop(columns=['original_index'])
 
-# Fill any potential NaNs in 'copod_outlier' and 'copod_score'
-# This might happen if a row was dropped due to NaNs in the features_for_copod
+# Completar NaNs potenciales en 'copod_outlier' y 'copod_score'
 df['copod_outlier'] = df['copod_outlier'].fillna(0).astype(int)
 df['copod_score'] = df['copod_score'].fillna(0)
 
-
-# Now your 'df' DataFrame has 'copod_outlier' and 'copod_score' columns
+# Validar que el proceso haya sido correcto observando el data frame
 print("\nDataFrame with COPOD Outlier Detection Results:")
 print(df.head())
-
-# You can now analyze or visualize the outliers using the 'copod_outlier' column
-# For example, let's see the count of outliers per campaign
 print("\nCOPOD Outlier Count per Campaign:")
 print(df.groupby('campaign')['copod_outlier'].value_counts())
--------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------#
+
 # Calcular las medidas estadísticas descriptivas de las variables numéricas
 descriptive_stats = df[['y', 'clicks', 'impressions', 'visitors', 'visits', 'orders', 'total_units_net', 'budget_USD', 'cost_USD']].describe()
 descriptive_stats_renamed = descriptive_stats.rename(index=nombres_para_visualizacion)
@@ -195,7 +183,7 @@ print(final_campaign_summary_with_total)
 #----------------Gráficos a modo de ejemplo se presentan para la variable respuesta 'y'------------------#
 #--------------------------------------------------------------------------------------------------------#
 
-# ------ Evolución de ventas en dolares ('y') 
+#  ------------------------------------------------- Evolución de ventas en dolares ('y')  -------------------------------------------------#
 if 'year_month' not in df.columns:
     df['year_month'] = df['ds'].dt.to_period('M')
 
@@ -256,7 +244,7 @@ plt.grid(True)
 plt.tight_layout()
 plt.show() 
 
-# ------ Evolución de ventas en dolares ('y') por campaña
+#  ------------------------------------------------- Evolución de ventas en dolares ('y') por campaña -------------------------------------------------#
 campaigns = df['campaign'].unique()
 
 # Definir la grilla 
@@ -287,7 +275,7 @@ for j in range(i + 1, len(axes)):
 plt.tight_layout()
 plt.show()
 
-# ------ Histograma de ventas en dolares ('y') por campaña
+# ------------------------------------------------ Histograma de ventas en dolares ('y') por campaña -------------------------------------------------#
 
 campaigns = df['campaign'].unique()
 
@@ -320,7 +308,7 @@ plt.tight_layout()
 plt.show()
 
 
-# ------ Box-plot de ventas en dolares ('y') por campaña
+#  ------------------------------------------------- Box-plot de ventas en dolares ('y') por campaña  -------------------------------------------------#
 
 campaigns = df['campaign'].unique()
 
@@ -352,8 +340,8 @@ for j in range(i + 1, len(axes)):
 plt.tight_layout()
 plt.show()
 
-# ------ Evolución de ventas en dolares ('y') por campaña identificando Cyber Day y No Cyber Day
-# Es un gráfico a modo ejemplo, se ajustó para otras variables como día de semana / fines de semana, Evento / No evento
+#  ------------------------------------------------- Evolución de ventas en dolares ('y') por campaña identificando Cyber Day y No Cyber Day -------------------------------------------------#
+# Es un gráfico a modo ejemplo, se ajustó para otras variables como día de semana / fines de semana, Evento / No evento, Outliers/No outliers
 
 df['cyber_status'] = df['is_cyber'].apply(lambda x: 'Cyber Day' if x == 1 else 'No Cyber Day')
 
@@ -395,7 +383,7 @@ for j in range(i + 1, len(axes)):
 plt.tight_layout()
 plt.show()
 
-# ------ Boxplot de ventas en dolares ('y') por campaña identificando Cyber Day y No Cyber Day
+#  ------------------------------------------------- Boxplot de ventas en dolares ('y') por campaña identificando Cyber Day y No Cyber Day -------------------------------------------------#
 # Es un gráfico a modo ejemplo, se ajustó para otras variables como día de semana / fines de semana, Evento / No evento
 
 df['cyber_status'] = df['is_cyber'].apply(lambda x: 'Cyber Day' if x == 1 else 'No Cyber Day')
@@ -438,7 +426,7 @@ for j in range(i + 1, len(axes)):
 plt.tight_layout()
 plt.show()
 
-# ------Cálculo de medidas de rendimiento de campaña identificando Cyber Day y No Cyber Day
+#  ------------------------------------------------- Cálculo de medidas de rendimiento de campaña identificando Cyber Day y No Cyber Day  -------------------------------------------------#
 # Es una tabla a modo ejemplo, se ajustó para otras variables como día de semana / fines de semana, Evento / No evento
 
 df['cyber_status'] = df['is_cyber'].apply(lambda x: 'Cyber Day' if x == 1 else 'No Cyber Day')
@@ -474,3 +462,54 @@ pivot_table = pivot_table.round(3)
 # Mostrar la tabla
 print("Tabla de rendimiento por campaña (Cyber Day vs No Cyber Day):")
 print(pivot_table)
+
+# ------------------------------------------------- Matriz de correlación -------------------------------------------------#
+# Seleccionar las variables numéricas para la matriz de correlación
+variables_numericas = ['y', 'clicks', 'impressions', 'visitors', 'visits', 'orders',
+                       'total_units_net', 'budget_USD', 'cost_USD']
+
+# Crear un sub-dataframe con solo las variables numéricas
+df_numerico = df[variables_numericas]
+
+# Calcular la matriz de correlación
+matriz_correlacion = df_numerico.corr()
+
+# Renombrar los índices y columnas de la matriz de correlación
+matriz_correlacion_renombrada = matriz_correlacion.rename(
+    index=nombres_para_visualizacion,
+    columns=nombres_para_visualizacion
+)
+
+# Visualizar la matriz de correlación con un mapa de calor usando los nombres renombrados
+plt.figure(figsize=(14, 12)) 
+sns.heatmap(matriz_correlacion_renombrada, annot=True, cmap='coolwarm', fmt=".2f", linewidths=.5)
+plt.title("Mapa de Calor de la Matriz de Correlación")
+plt.xticks(rotation=45, ha='right') 
+plt.yticks(rotation=0)
+plt.tight_layout() 
+plt.show()
+
+#------------------------------------- Definición de componente HOLIDAY -------------------------------------------------#
+# Definir las variables clave a verificar para datos faltantes
+columnas_clave = ['y', 'clicks', 'impressions', 'visitors', 'visits', 'orders',
+                  'total_units_net', 'budget_USD', 'cost_USD']
+
+# Identificar is_cyber es 1, is_outlier es 1 o is_event es 1
+condicion_eventos = (df['is_cyber'] == 1) | (df['is_outlier'] == 1) | (df['is_event'] == 1)
+
+# Identificar datos faltantes en alguna de las variables clave
+condicion_missing = df[columnas_clave].isnull().any(axis=1)
+
+# Definir la variable 'holiday': es 1 si se cumple la condición_eventos O la condicion_missing
+df['holiday'] = np.where(condicion_eventos | condicion_missing, 1, 0)
+
+# Verificar las primeras filas para ver la nueva columna 'holiday'
+print("\nDataFrame con la nueva columna 'holiday':")
+print(df.head())
+
+# Contar cuántas filas tienen holiday = 1
+print("\nConteo de filas con holiday = 1:")
+print(df['holiday'].value_counts())
+
+# Definir el data frame para la componente Holiday
+holidays_df = df.loc[df['holiday'] != '', ['holiday', 'ds']].copy()
