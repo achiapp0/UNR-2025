@@ -42,8 +42,84 @@ for campaign, dates in campaign_dates.items():
     if not missing_dates.empty:
         print(f"Campaign: {campaign}")
         print(f"Missing Dates: {missing_dates.tolist()}")
+        
+---------------------------------------------------------------------OUTLIERS ------------------------------------------------------
+# Assuming 'df' is your DataFrame loaded in the previous steps
+# Assuming 'campaigns' is the list of unique campaign names
+
+# Initialize a list to store the results from each campaign
+outlier_results = []
+
+# Iterate through each campaign
+for campaign in campaigns:
+    print(f"\nDetecting outliers for campaign: {campaign}")
+
+    # Filter data for the current campaign
+    df_campaign = df[df['campaign'] == campaign].copy()
+
+    # Select the columns you want to use for outlier detection
+    # You might want to choose relevant numerical columns here
+    # For example, let's use 'y' and 'budget_USD' as features for COPOD
+    features_for_copod = ['y', 'budget_USD', 'clicks', 'impressions', 'visitors', 'visits', 'orders', 'total_units_net', 'cost_USD'] # Add or remove features as needed
+
+    # Ensure the campaign data has the necessary features
+    campaign_features = df_campaign[features_for_copod]
+
+    # Handle potential missing values in the features
+    # You might want to use an imputer or drop rows with NaNs
+    # For simplicity, let's drop rows with NaNs for this example
+    campaign_features_cleaned = campaign_features.dropna()
+
+    # Keep track of the original indices before dropping NaNs
+    original_indices = campaign_features_cleaned.index
+
+    # Scale the features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(campaign_features_cleaned)
+
+    # Initialize and train COPOD model
+    clf = COPOD()
+    clf.fit(X_scaled)
+
+    # Get outlier labels and scores
+    outlier_labels = clf.labels_
+    decision_scores = clf.decision_scores_
+
+    # Create a temporary DataFrame to store the results for the current campaign
+    temp_results_df = pd.DataFrame({
+        'original_index': original_indices,
+        'copod_outlier': outlier_labels,
+        'copod_score': decision_scores
+    })
+
+    # Append the results to the list
+    outlier_results.append(temp_results_df)
+
+# Concatenate the results from all campaigns
+all_outlier_results = pd.concat(outlier_results)
+
+# Merge the results back into the original DataFrame
+# We'll merge based on the original index to align the results correctly
+df = df.merge(all_outlier_results, left_index=True, right_on='original_index', how='left')
+
+# Drop the temporary 'original_index' column
+df = df.drop(columns=['original_index'])
+
+# Fill any potential NaNs in 'copod_outlier' and 'copod_score'
+# This might happen if a row was dropped due to NaNs in the features_for_copod
+df['copod_outlier'] = df['copod_outlier'].fillna(0).astype(int)
+df['copod_score'] = df['copod_score'].fillna(0)
 
 
+# Now your 'df' DataFrame has 'copod_outlier' and 'copod_score' columns
+print("\nDataFrame with COPOD Outlier Detection Results:")
+print(df.head())
+
+# You can now analyze or visualize the outliers using the 'copod_outlier' column
+# For example, let's see the count of outliers per campaign
+print("\nCOPOD Outlier Count per Campaign:")
+print(df.groupby('campaign')['copod_outlier'].value_counts())
+-------------------------------------------------------------------------
 # Calcular las medidas estadísticas descriptivas de las variables numéricas
 descriptive_stats = df[['y', 'clicks', 'impressions', 'visitors', 'visits', 'orders', 'total_units_net', 'budget_USD', 'cost_USD']].describe()
 descriptive_stats_renamed = descriptive_stats.rename(index=nombres_para_visualizacion)
@@ -307,10 +383,9 @@ for i, campaign in enumerate(campaigns):
     ax.set_title(f"{campaign}")
     ax.set_xlabel("Fecha")
     ax.set_ylabel(y_visual_name)
-    ax.tick_params(axis='x', rotation=45) # Rotate x-axis labels for better readability
-    ax.grid(True) # Add grid for better readability of time series
-    ax.legend(title='Tipo de Día', loc='upper right') # Add legend with title and location
-
+    ax.tick_params(axis='x', rotation=45)
+    ax.grid(True) 
+    ax.legend(title='Tipo de Día', loc='upper right') 
 
 # Eliminar gráficos vacíos
 for j in range(i + 1, len(axes)):
@@ -319,3 +394,83 @@ for j in range(i + 1, len(axes)):
 # Ajustar la esctructura y mostrar los gráficos
 plt.tight_layout()
 plt.show()
+
+# ------ Boxplot de ventas en dolares ('y') por campaña identificando Cyber Day y No Cyber Day
+# Es un gráfico a modo ejemplo, se ajustó para otras variables como día de semana / fines de semana, Evento / No evento
+
+df['cyber_status'] = df['is_cyber'].apply(lambda x: 'Cyber Day' if x == 1 else 'No Cyber Day')
+
+if 'cyber_status' not in df.columns:
+    df['cyber_status'] = df['is_cyber'].apply(lambda x: 'Cyber Day' if x == 1 else 'No Cyber Day')
+
+campaigns = df['campaign'].unique()
+
+# Definir la grilla
+n_campaigns = len(campaigns)
+cols = 3  
+rows = (n_campaigns + cols - 1) // cols  
+
+fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4), sharex=False)  
+axes = axes.flatten()  
+
+y_visual_name = nombres_para_visualizacion.get('y', 'y')
+
+# Crear el box plot por campaña en la grilla, separado por estado cyber day / no cyber day
+for i, campaign in enumerate(campaigns):
+    ax = axes[i] 
+    campaign_data = df[df['campaign'] == campaign].copy()
+
+    sns.boxplot(data=campaign_data, x='cyber_status', y='y', ax=ax,
+                palette={'Cyber Day': 'pink', 'No Cyber Day': 'royalblue'})
+
+    ax.set_title(f"{campaign}")
+    ax.set_xlabel("Tipo de Día (Cyber vs Normal)")
+    ax.set_ylabel(y_visual_name)
+    ax.tick_params(axis='x', rotation=45)
+
+    ax.grid(True, axis='y') 
+
+# Eliminar gráficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+# Ajustar la esctructura y mostrar los gráficos
+plt.tight_layout()
+plt.show()
+
+# ------Cálculo de medidas de rendimiento de campaña identificando Cyber Day y No Cyber Day
+# Es una tabla a modo ejemplo, se ajustó para otras variables como día de semana / fines de semana, Evento / No evento
+
+df['cyber_status'] = df['is_cyber'].apply(lambda x: 'Cyber Day' if x == 1 else 'No Cyber Day')
+
+# Agrupar por campaña y tipo de día
+grouped = df.groupby(['campaign', 'cyber_status'])[['visits', 'visitors', 'y', 'cost_USD', 'budget_USD']].sum().reset_index()
+
+# Cálculo de las 3 métricas
+epsilon = 1e-9
+grouped['CRT'] = grouped['visits'] / (grouped['visitors'] + epsilon)
+grouped['ROI'] = grouped['y'] / (grouped['cost_USD'] + epsilon)
+grouped['AdCost'] = grouped['budget_USD'] / (grouped['y'] + epsilon)
+
+# Calcular el total por tipo de día
+total = df.groupby('cyber_status')[['visits', 'visitors', 'y', 'cost_USD', 'budget_USD']].sum().reset_index()
+total['campaign'] = 'Total'
+total['CRT'] = total['visits'] / (total['visitors'] + epsilon)
+total['ROI'] = total['y'] / (total['cost_USD'] + epsilon)
+total['AdCost'] = total['budget_USD'] / (total['y'] + epsilon)
+
+# Unir campañas + total
+summary_all = pd.concat([grouped, total], ignore_index=True)
+
+# Mantener solo las columnas necesarias
+summary_all = summary_all[['campaign', 'cyber_status', 'CRT', 'ROI', 'AdCost']]
+
+# Crear y ordenar la tabla pivoteada (doble entrada)
+pivot_table = summary_all.pivot(index='campaign', columns='cyber_status', values=['CRT', 'ROI', 'AdCost'])
+pivot_table = pivot_table[[('CRT', 'Cyber Day'), ('CRT', 'No Cyber Day'),
+                        ]]
+pivot_table = pivot_table.round(3)
+
+# Mostrar la tabla
+print("Tabla de rendimiento por campaña (Cyber Day vs No Cyber Day):")
+print(pivot_table)
