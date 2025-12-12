@@ -86,26 +86,25 @@ plt.show()
 # -------------------------------------------- Ajustar Modelo Prophet ------------------------------------------#
 # --------------------------------------------------------------------------------------------------------------#
 
-# Before initializing the Prophet model, inspect the holidays_df
+# Revisar y validar el data frame Holidays
 print("Inspecting holidays_df:")
 print(holidays_df.head())
 print(holidays_df['holiday'].dtype)
 
-# If the 'holiday' column is not of object/string type, convert it
+# Setear el formato de Holiday
 if holidays_df['holiday'].dtype != 'object':
     print("Converting 'holiday' column to string type.")
     holidays_df['holiday'] = holidays_df['holiday'].astype(str)
     print("Conversion complete. New dtype:", holidays_df['holiday'].dtype)
 
-# Now proceed with the rest of the code that was failing:
-# Lista de covariables a incluir en el modelo - OJO REVISAR PREVIOUS CYBER DAYS!!!!
+# Identificar las covariables a incluir en el modelo
 covariables = ['clicks', 'impressions', 'visitors', 'visits', 'orders', 'total_units_net',
                'budget_USD', 'cost_USD']
 
-# Lista de campañas únicas
+# Listar las campañas
 campaigns = df['campaign'].unique()
 
-# Diccionarios para modelos, predicciones y métricas
+# Preparar diccionarios para modelos, predicciones y métricas
 models = {}
 forecasts = {}
 metrics = {}
@@ -139,15 +138,15 @@ for campaign in campaigns:
         interval_width=0.95
     )
 
-    # Agregar regresores
+    # Agregar las covariables/regresores
     for cov in covariables:
         model.add_regressor(cov)
 
-    # Entrenar modelo
+    # Entrenar el modelo
     model.fit(train_df[['ds', 'y'] + covariables])
     models[campaign] = model
 
-    # Crear DataFrame futuro
+    # Crear DataFrame para pronósticos
     future = test_df[['ds'] + covariables].copy()
     forecast = model.predict(future)
     forecasts[campaign] = forecast
@@ -157,7 +156,7 @@ for campaign in campaigns:
     forecast['y'] = test_df['y'].values
     all_predictions.append(forecast[['ds', 'y', 'yhat', 'campaign']])
 
-    # Calcular métricas
+    # Calcular métricas de bondad de ajuste
     y_train_pred = model.predict(train_df[['ds'] + covariables])['yhat'].values
     y_train_real = train_df['y'].values
     y_test_pred = forecast['yhat'].values
@@ -188,6 +187,7 @@ for campaign in campaigns:
     fig = model.plot_components(forecast)
     plt.close(fig)
 
+# --------------------------------------------------------------------------------------------------------------#
 # Combinar predicciones
 all_predictions_df = pd.concat(all_predictions)
 
@@ -201,3 +201,111 @@ for campaign, metric in metrics.items():
     print("🔸 Prueba:")
     for key, value in metric["Test"].items():
         print(f"   {key}: {value:.4f}")
+
+# Crear lista para guardar coeficientes por campaña
+all_coefficients = []
+
+# Iterar el modelo, extraer los coefficientes y agregar a la lista
+for campaign, model in models.items():
+    coefficients = regressor_coefficients(model)
+    coefficients['campaign'] = campaign  # Add a campaign column
+    all_coefficients.append(coefficients)
+
+# Generar un unico dataframe de coeficientes
+all_coefficients_df = pd.concat(all_coefficients)
+
+# Crear una tabla para mostrar los resultados hallados
+comparison_table = all_coefficients_df.pivot(index='regressor', columns='campaign', values='coef').round(7)
+print("\nTabla de Comparación de Coeficientes (obtenidos del entrenamiento):")
+print(comparison_table)
+
+# Crear grilla de gráficos de coeficientes
+n_campaigns = len(models)
+cols = 3  # Number of columns in the grid
+rows = (n_campaigns + cols - 1) // cols  
+
+fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4), sharex=False)
+axes = axes.flatten()  
+
+# Graficar los coeficientes para cada campaña
+for i, campaign in enumerate(models.keys()):
+    ax = axes[i]
+    df_plot = all_coefficients_df[all_coefficients_df['campaign'] == campaign]
+    df_plot.plot(x='regressor', y='coef', kind='bar', ax=ax)
+    ax.set_title(f'Campaña: {campaign}')
+    ax.set_xlabel("Regresor")
+    ax.set_ylabel("Coeficiente") 
+
+# Elminar gráficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+
+# Ajustar la esctructura y mostrar los gráficos
+plt.tight_layout()
+plt.show()
+# --------------------------------------------------------------------------------------------------------------#
+
+# Graficar estacionalidad semanal
+print("📈 Visualizando Componente de Estacionalidad Semanal en Grilla por Campaña (Conjunto de Entrenamiento)...")
+
+component_to_plot = 'weekly'
+
+campaigns_with_models = [c for c in campaigns if c in models]
+n_campaigns_valid = len(campaigns_with_models)
+
+if n_campaigns_valid > 0:
+        cols = 3  
+    rows = (n_campaigns_valid + cols - 1) // cols  
+
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4), sharex=False) 
+    axes = axes.flatten()  
+    fig.suptitle(f"Componente: Estacionalidad {component_to_plot.capitalize()} por Campaña (Entrenamiento)", fontsize=16, y=1.02)
+
+    i = 0 # Counter for valid campaigns
+    for campaign in campaigns_with_models:
+        ax = axes[i]
+        model = models[campaign]
+
+             df_campaign = df[df['campaign'] == campaign].copy()
+        train_size = int(len(df_campaign) * 0.8)
+        train_df = df_campaign.iloc[:train_size].copy()
+
+        required_cols_for_predict = ['ds'] + [col for col in covariables if col in train_df.columns]
+        # Filter required_cols_for_predict to only include columns actually in train_df
+        required_cols_for_predict = [col for col in required_cols_for_predict if col in train_df.columns]
+
+        try:
+            forecast_train = model.predict(train_df[required_cols_for_predict])
+
+            if component_to_plot in forecast_train.columns:
+                plot_forecast_component(model, forecast_train, component_to_plot, ax=ax)
+                ax.set_title(f"{campaign}")
+                ax.set_xlabel("Fecha") # Explicitly label the x-axis
+                ax.grid(True, linestyle="--", linewidth=0.5)
+            else:
+                 ax.set_title(f"{campaign} - No encontrado")
+                 ax.text(0.5, 0.5, f'{component_to_plot} component not in forecast', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, color='orange')
+
+        except Exception as e:
+            ax.set_title(f"{campaign} - Error")
+            ax.text(0.5, 0.5, f'Plotting error: {e}', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, color='red')
+            print(f"❌ Error al generar forecast o graficar la estacionalidad semanal para la campaña '{campaign}' en entrenamiento: {e}")
+
+
+        i += 1
+
+# Elminar gráficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+
+# Ajustar la esctructura y mostrar los gráficos
+plt.tight_layout()
+plt.show()
+
+else:
+    print("\nNo hay campañas con modelos entrenados disponibles para visualizar la estacionalidad semanal en una grilla.")
+
+print("\n✅ Visualización del componente de estacionalidad semanal (Entrenamiento) en grilla completada.")
+# --------------------------------------------------------------------------------------------------------------#
