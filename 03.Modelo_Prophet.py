@@ -246,7 +246,7 @@ plt.tight_layout()
 plt.show()
 # --------------------------------------------------------------------------------------------------------------#
 
-# Graficar estacionalidad semanal
+# Graficar la componente "Estacionalidad"
 print("📈 Visualizando Componente de Estacionalidad Semanal en Grilla por Campaña (Conjunto de Entrenamiento)...")
 
 component_to_plot = 'weekly'
@@ -309,3 +309,69 @@ else:
 
 print("\n✅ Visualización del componente de estacionalidad semanal (Entrenamiento) en grilla completada.")
 # --------------------------------------------------------------------------------------------------------------#
+
+# Graficar la componente "Tendencia"
+component_to_plot = 'trend'
+
+campaigns_with_models = [c for c in campaigns if c in models]
+n_campaigns_valid = len(campaigns_with_models)
+
+if n_campaigns_valid > 0:
+    cols = 3  
+    rows = (n_campaigns_valid + cols - 1) // cols  
+
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4), sharex=False)
+    axes = axes.flatten()  
+    fig.suptitle(f"Componente: {component_to_plot.capitalize()} por Campaña (Entrenamiento)", fontsize=16, y=1.02)
+
+    i = 0 # Counter for valid campaigns
+    for campaign in campaigns_with_models:
+        ax = axes[i]
+        model = models[campaign]
+
+        df_campaign = df[df['campaign'] == campaign].copy()
+        train_size = int(len(df_campaign) * 0.8)
+        train_df = df_campaign.iloc[:train_size].copy()
+
+        required_cols_for_predict = ['ds'] + [col for col in covariables if col in train_df.columns]
+
+        if not all(col in train_df.columns for col in required_cols_for_predict):
+             ax.set_title(f"{campaign} - Datos faltantes")
+             ax.text(0.5, 0.5, 'Missing regressor columns', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, color='orange')
+             print(f"⚠️ Advertencia: Columnas de regresores faltantes en train_df para la campaña '{campaign}'. No se puede graficar la tendencia.")
+             i += 1 # Increment counter even if skipping plot
+             continue
+
+        try:
+            forecast_train = model.predict(train_df[required_cols_for_predict])
+
+            if component_to_plot in forecast_train.columns:
+                plot_forecast_component(model, forecast_train, component_to_plot, ax=ax)
+                ax.set_title(f"{campaign}")
+                ax.tick_params(axis='x', rotation=45)
+                ax.grid(True, linestyle="--", linewidth=0.5)
+                ax.set_xlabel("Fecha")
+            else:
+                 ax.set_title(f"{campaign} - No encontrado")
+                 ax.text(0.5, 0.5, f'{component_to_plot} component not in forecast', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, color='orange')
+
+        except Exception as e:
+            ax.set_title(f"{campaign} - Error")
+            ax.text(0.5, 0.5, f'Plotting error: {e}', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, color='red')
+            print(f"❌ Error al generar forecast o graficar la tendencia para la campaña '{campaign}' en entrenamiento: {e}")
+
+        i += 1 
+
+# Elminar gráficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+
+# Ajustar la esctructura y mostrar los gráficos
+plt.tight_layout()
+plt.show()
+
+else:
+    print("\nNo hay campañas con modelos entrenados disponibles para visualizar la tendencia en una grilla.")
+
+print("\n✅ Visualización del componente de tendencia (Entrenamiento) en grilla completada.")
