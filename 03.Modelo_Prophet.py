@@ -244,11 +244,72 @@ for j in range(i + 1, len(axes)):
 # Ajustar la esctructura y mostrar los gráficos
 plt.tight_layout()
 plt.show()
+
+# --------------------------------------------------------------------------------------------------------------#
+
+# Definición de horizonte, períodos e inicio para usar la evaluación de metricas de bondad de ajuste con validación cruzada
+campaigns = df['campaign'].unique()
+
+cv_results = {}
+
+for campaign in campaigns:
+    print(f"Performing cross-validation for campaign: {campaign}")
+
+    df_campaign = df[df['campaign'] == campaign].copy()
+
+    initial = min(365, int(len(df_campaign) * 0.8))  # Use 60% of data for initial training or 365 days, whichever is smaller
+    horizon = '90 days'
+    period = '30 days'
+
+    try:
+        df_cv = cross_validation(models[campaign],  
+                                 horizon=horizon,
+                                 period=period,
+                                 initial=f'{initial} days')
+        cv_results[campaign] = df_cv  
+
+        print(f"\nCross-validation results for campaign: {campaign}")
+        print(df_cv.head())
+
+    except ValueError as e:
+        print(f"Error during cross-validation for campaign {campaign}: {e}")
+        print("Consider adjusting initial, horizon, or period values for this campaign.")
+
+# campaign_cv_results = cv_results['Campaign Name']
+
+# --------------------------------------------------------------------------------------------------------------#
+
+# Utilizar la definición de validación cruzada evaluar la métrica MAPE (se cita a modo de ejemplo, se aplicó en todas las métricas de bondad de ajuste)
+
+campaigns = list(cv_results.keys())  
+
+n_campaigns = len(campaigns)
+cols = 3
+rows = (n_campaigns + cols - 1) // cols
+
+fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4), sharex=False)
+axes = axes.flatten() 
+
+for i, campaign in enumerate(campaigns):
+    ax = axes[i]  # Get the current subplot
+    df_cv = cv_results[campaign]  
+    
+    df_p = performance_metrics(df_cv)
+    
+    plot_cross_validation_metric(df_cv, metric='mape', ax=ax)  
+    ax.set_title(f"Cross-validation MAPE for Campaign: {campaign}") 
+
+# Elminar gráficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+# Ajustar la esctructura y mostrar los gráficos
+plt.tight_layout()
+plt.show()
+
 # --------------------------------------------------------------------------------------------------------------#
 
 # Graficar la componente "Estacionalidad"
-print("📈 Visualizando Componente de Estacionalidad Semanal en Grilla por Campaña (Conjunto de Entrenamiento)...")
-
 component_to_plot = 'weekly'
 
 campaigns_with_models = [c for c in campaigns if c in models]
@@ -308,6 +369,7 @@ else:
     print("\nNo hay campañas con modelos entrenados disponibles para visualizar la estacionalidad semanal en una grilla.")
 
 print("\n✅ Visualización del componente de estacionalidad semanal (Entrenamiento) en grilla completada.")
+
 # --------------------------------------------------------------------------------------------------------------#
 
 # Graficar la componente "Tendencia"
@@ -375,3 +437,139 @@ else:
     print("\nNo hay campañas con modelos entrenados disponibles para visualizar la tendencia en una grilla.")
 
 print("\n✅ Visualización del componente de tendencia (Entrenamiento) en grilla completada.")
+
+# --------------------------------------------------------------------------------------------------------------#
+
+# Graficar la componente "Holidays"
+component_to_plot = 'holidays'
+
+campaigns_with_models = [c for c in campaigns if c in models]
+n_campaigns_valid = len(campaigns_with_models)
+
+if n_campaigns_valid > 0:
+    cols = 3 
+    rows = (n_campaigns_valid + cols - 1) // cols  
+
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4), sharex=False) 
+    axes = axes.flatten()  
+    fig.suptitle(f"Componente: {component_to_plot.capitalize()} por Campaña (Entrenamiento)", fontsize=16, y=1.02)
+
+    i = 0 # Counter for valid campaigns
+    for campaign in campaigns_with_models:
+        ax = axes[i]
+        model = models[campaign]
+
+        df_campaign = df[df['campaign'] == campaign].copy()
+        train_size = int(len(df_campaign) * 0.8)
+        train_df = df_campaign.iloc[:train_size].copy()
+
+        required_cols_for_predict = ['ds'] + [col for col in covariables if col in train_df.columns]
+        required_cols_for_predict = [col for col in required_cols_for_predict if col in train_df.columns]
+
+        try:
+            forecast_train = model.predict(train_df[required_cols_for_predict])
+
+            if component_to_plot in forecast_train.columns:
+                plot_forecast_component(model, forecast_train, component_to_plot, ax=ax)
+                ax.set_title(f"{campaign}")
+                ax.tick_params(axis='x', rotation=45)
+                ax.grid(True, linestyle="--", linewidth=0.5)
+                # Set the x-axis label to "Fecha"
+                ax.set_xlabel("Fecha")
+            else:
+                 ax.set_title(f"{campaign} - No encontrado")
+                 ax.text(0.5, 0.5, f'{component_to_plot} component not in forecast', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, color='orange')
+
+        except Exception as e:
+            ax.set_title(f"{campaign} - Error")
+            ax.text(0.5, 0.5, f'Plotting error: {e}', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, color='red')
+            print(f"❌ Error al generar forecast o graficar los días festivos para la campaña '{campaign}' en entrenamiento: {e}")
+
+        i += 1 
+
+# Elminar gráficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+# Ajustar la esctructura y mostrar los gráficos
+plt.tight_layout()
+plt.show()
+
+else:
+    print("\nNo hay campañas con modelos entrenados disponibles para visualizar los días festivos en una grilla.")
+
+print("\n✅ Visualización del componente de días festivos (Entrenamiento) en grilla completada.")
+
+# --------------------------------------------------------------------------------------------------------------#
+
+# Graficar los valores observados y los predichos
+all_predictions_df = pd.concat(all_predictions)
+
+n_campaigns = len(campaigns)
+cols = 3  
+rows = (n_campaigns + cols - 1) // cols  
+
+fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4), sharex=False)
+axes = axes.flatten()  # Aplanar ejes para iterar fácilmente
+
+for i, campaign in enumerate(campaigns):
+    ax = axes[i]
+    df_plot = all_predictions_df[all_predictions_df['campaign'] == campaign]
+    ax.plot(df_plot['ds'], df_plot['y'], label='Real (y)', color='green')
+    ax.plot(df_plot['ds'], df_plot['yhat'], label='Predicción (yhat)', color='lightblue')
+    ax.set_title(f'Campaña: {campaign}')
+    ax.set_xlabel('Fecha')
+    ax.set_ylabel('Valor')
+    ax.tick_params(axis='x', rotation=45)
+    ax.legend()
+
+# Eliminar graficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+# Ajustar la esctructura y mostrar los gráficos
+plt.tight_layout()
+plt.show()
+
+# --------------------------------------------------------------------------------------------------------------#
+
+# Graficar los valores observados y los predichos separando el conjunto de datos por train/test
+all_predictions_df = pd.concat(all_predictions)
+
+n_campaigns = len(campaigns)
+cols = 3
+rows = (n_campaigns + cols - 1) // cols
+
+fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4), sharex=False)
+axes = axes.flatten()
+
+for i, campaign in enumerate(campaigns):
+    ax = axes[i]
+
+    df_campaign = df[df['campaign'] == campaign].copy()
+    train_size = int(len(df_campaign) * 0.8)
+    train_df = df_campaign.iloc[:train_size]
+    test_df = df_campaign.iloc[train_size:]
+    pred_df = all_predictions_df[all_predictions_df['campaign'] == campaign]
+
+    split_date = test_df.iloc[0]['ds']
+
+    ax.plot(train_df['ds'], train_df['y'], label='Train (y)', color='gray')
+    ax.plot(test_df['ds'], test_df['y'], label='Test (y)', color='green')
+    ax.plot(pred_df['ds'], pred_df['yhat'], label='Predicción (yhat)', color='lightblue')
+
+    ax.axvline(pd.to_datetime(split_date), color='red', linestyle='--', label='Inicio Test')
+
+    ax.set_title(f'Campaña: {campaign}')
+    ax.set_xlabel('Fecha')
+    ax.set_ylabel('Valor')
+    ax.tick_params(axis='x', rotation=45)
+    ax.legend()
+
+# Eliminar graficos vacíos
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+# Ajustar la esctructura y mostrar los gráficos
+plt.tight_layout()
+plt.show()
